@@ -549,9 +549,7 @@ function bindToolbar(viewerInstance, root, els) {
     ],
     getSelectedId: () => alignBtn.dataset.selectedId ?? null,
     onSelect: async (item) => {
-      const targetId = ensureActiveBlock();
-      if (!targetId) return;
-      await applyTextBlockLayout(viewerInstance, targetId, { alignment: item.id });
+      // No SDK-side backing for alignment yet — track selection locally.
       alignBtn.dataset.selectedId = item.id;
     },
   });
@@ -567,9 +565,7 @@ function bindToolbar(viewerInstance, root, els) {
       return lineHeightBtn.dataset.selectedId ?? null;
     },
     onSelect: async (item) => {
-      const targetId = ensureActiveBlock();
-      if (!targetId) return;
-      await applyTextBlockLayout(viewerInstance, targetId, { lineSpacingFactor: item.meta });
+      // No SDK-side backing for yet — track selection locally.
       lineHeightBtn.dataset.selectedId = item.id;
     },
   });
@@ -717,24 +713,6 @@ function setSwatch(button, color) {
   if (input) input.value = color;
 }
 
-async function applyTextBlockLayout(viewerInstance, blockId, layoutUpdate) {
-  const block = viewerInstance.contentEditor.getBlock(blockId);
-
-  if (!block) return;
-
-  await viewerInstance.contentEditor.setLayout(blockId, layoutUpdate);
-
-  // The public layout API currently recalculates the block when `maxWidth` is
-  // supplied. For alignment / line-height, follow up with the existing width so
-  // the text block is laid out again using the updated layout state.
-  if (layoutUpdate.alignment !== undefined || layoutUpdate.lineSpacingFactor !== undefined) {
-    const maxWidth = block.layout?.maxWidth;
-
-    if (typeof maxWidth === "number") {
-      await viewerInstance.contentEditor.setLayout(blockId, { maxWidth });
-    }
-  }
-}
 
 const STRIKEOUT_CUSTOM_DATA_KEY = "embeddedExternalToolbarStrikeoutBlockId";
 
@@ -957,6 +935,11 @@ export async function load(defaultConfiguration) {
     ...defaultConfiguration,
     initialViewState,
     documentEditorToolbarItems: [],
+    documentEditorConfiguration: {
+      thumbnailDefaultSize: 250,
+      thumbnailMaxSize: 250,
+      thumbnailMinSize: 240,
+    },
     documentEditorFooterItems: [
       ...PSPDFKit.defaultDocumentEditorFooterItems.filter((item) => item.type !== "save-as"),
       createDocumentEditorDownloadProxy(),
@@ -1193,8 +1176,12 @@ const styles = `
   }
 
   .viewer {
-    flex: 1;
+    position: relative;
+    flex: 1 1 0;
+    width: 100%;
+    min-width: 0;
     min-height: 0;
+    overflow: hidden;
   }
 
   .toolbarButton,

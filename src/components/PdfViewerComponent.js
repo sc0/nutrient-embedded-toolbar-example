@@ -4,7 +4,7 @@ import {
   CustomContainer,
   load,
   unload,
-} from "../examples/embeddedExternalToolbar";
+} from "../example/embeddedExternalToolbar";
 
 function publicPath(path) {
   const publicUrl = process.env.PUBLIC_URL || "";

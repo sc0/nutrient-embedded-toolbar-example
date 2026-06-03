@@ -2,6 +2,21 @@
   display: none !important;
 }
 
+/*
+ * Keep the document editor modal width independent from the thumbnail gallery's
+ * intrinsic width. The gallery is measured with ResizeObserver; if the modal is
+ * content-sized, thumbnail layout can grow the modal while it is being measured,
+ * which triggers Chrome's ResizeObserver loop warning.
+ */
+.PSPDFKit-DocumentEditor {
+  inline-size: min(960px, calc(100vw - 2 * var(--bui-spacing-xl))) !important;
+  max-inline-size: 100% !important;
+}
+
+.PSPDFKit-DocumentEditor [data-block-id="document-editor-gallery"] {
+  inline-size: 100% !important;
+}
+
 /* ── Custom content editing secondary toolbar (tools.contextual slot) ── */
 
 .ceToolbar {
