@@ -1,0 +1,61 @@
+{
+  "name": "nutrient-web-example-react",
+  "version": "1.0.0",
+  "description": "Standalone and offline PDF viewer web application built with Nutrient Web SDK and React",
+  "keywords": [
+    "wasm",
+    "web",
+    "assembly",
+    "pdf",
+    "pdf",
+    "viewer",
+    "react",
+    "asm.js",
+    "offline",
+    "indexeddb"
+  ],
+  "author": "Nutrient (https://www.nutrient.io)",
+  "homepage": "https://www.nutrient.io",
+  "license": "SEE LICENSE IN https://www.nutrient.io/legal/Nutrient_SDK_User_Evaluation_Subscription_Agreement",
+  "readme": "https://www.nutrient.io/guides/web",
+  "scripts": {
+    "verify-installation": "node scripts/verify-install.js && node scripts/copy-nutrient-files.js",
+    "prestart": "npm run verify-installation",
+    "start": "react-scripts start",
+    "prebuild": "npm run verify-installation",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "start:e2e": "npm run start"
+  },
+  "dependencies": {
+    "@nutrient-sdk/viewer": "1.16.0-nightly.20260603",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-scripts": "^5.0.1"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "ncp": "^2.0.0"
+  },
+  "overrides": {
+    "nth-check": "^3.0.1",
+    "postcss": "^8.5.9",
+    "loader-utils": "^2.0.4",
+    "http-proxy-middleware": "^2.0.9",
+    "serialize-javascript": "^7.0.5",
+    "@tootallnate/once": "^3.0.1"
+  },
+  "browserslist": [
+    "Firefox ESR",
+    "last 2 Chrome versions",
+    "last 2 firefox versions",
+    "last 2 edge versions",
+    "last 2 safari versions",
+    "last 2 and_chr versions",
+    "last 2 ios_saf versions"
+  ]
+}
