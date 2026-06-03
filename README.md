@@ -31,7 +31,7 @@ npm run build
 ## Key Files
 
 - `src/components/PdfViewerComponent.js` — React adapter that loads/unloads the migrated catalog example.
-- `src/examples/embeddedExternalToolbar.js` — Migrated catalog example logic.
+- `src/example/embeddedExternalToolbar.js` — Migrated catalog example logic.
 - `public/embedded-external-toolbar/static/styles.css` — Styles injected into the SDK contextual toolbar.
 - `public/document.pdf` — Example document.
 
