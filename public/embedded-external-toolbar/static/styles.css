@@ -37,19 +37,20 @@
   align-items: center;
   gap: 0;
   flex: 1;
-  justify-content: center;
-}
-
-.ceToolbar__spacer {
-  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .ceToolbar__group {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 14px;
+  padding: 0 12px;
   border-right: 1px solid #ececef;
+}
+
+.ceToolbar__group:first-child {
+  padding-left: 0;
 }
 
 .ceToolbar__group:last-child {
@@ -103,11 +104,17 @@
   font: inherit;
   font-size: 14px;
   line-height: 1;
+  white-space: nowrap;
   transition: background 0.12s ease-out, border-color 0.12s ease-out;
 }
 
 .ceToolbar__select:hover:not(.is-disabled) {
   background: #f4f4f7;
+}
+
+.ceToolbar__select.is-pressed {
+  background: #ececf2;
+  border-color: #d6d6df;
 }
 
 .ceToolbar__select.is-disabled,
@@ -166,7 +173,7 @@
 .ceToolbar__dropdown {
   display: flex;
   flex-direction: column;
-  max-height: 320px;
+  max-height: 360px;
   overflow-y: auto;
   padding: 4px;
   background: #ffffff;
@@ -191,6 +198,7 @@
   color: #1a1a1a;
   font: inherit;
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
   transition: background 0.1s ease-out;
 }
@@ -210,7 +218,50 @@
   border-color: #d6d6df;
 }
 
-/* Save button */
+/* Right-hand actions: dirty indicator, discard, save */
+
+.ceToolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 12px;
+}
+
+.ceToolbar__dirtyDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d4a72c;
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+}
+
+.ceToolbar__dirtyDot.is-visible {
+  opacity: 1;
+}
+
+.ceToolbar__discard {
+  height: 36px;
+  padding: 0 14px;
+  background: transparent;
+  border: 1px solid #d6d6df;
+  border-radius: 8px;
+  color: #1a1a1a;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease-out;
+}
+
+.ceToolbar__discard:hover:not(:disabled) {
+  background: #f4f4f7;
+}
+
+.ceToolbar__discard:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 .ceToolbar__save {
   height: 36px;
@@ -235,6 +286,90 @@
   cursor: not-allowed;
 }
 
+/* Introspection panel */
+
+.ceInfoPanel {
+  width: 340px;
+  max-height: 70vh;
+  padding: 8px;
+  gap: 4px;
+}
+
+.ceInfoPanel__section {
+  padding: 8px 8px 10px;
+  border-bottom: 1px solid #ececef;
+}
+
+.ceInfoPanel__section:last-child {
+  border-bottom: none;
+}
+
+.ceInfoPanel__heading {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8a8f98;
+  margin-bottom: 6px;
+}
+
+.ceInfoPanel__line {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #3a3f47;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ceInfoPanel__block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+.ceInfoPanel__blockText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: #3a3f47;
+}
+
+.ceInfoPanel__blockText.is-active {
+  font-weight: 700;
+  color: #5b48de;
+}
+
+.ceInfoPanel__blockText.is-selected {
+  font-weight: 600;
+}
+
+.ceInfoPanel__blockActions {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.ceInfoPanel__miniBtn {
+  padding: 2px 6px;
+  background: #f4f4f7;
+  border: 1px solid #e0e0e6;
+  border-radius: 4px;
+  color: #3a3f47;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.1s ease-out;
+}
+
+.ceInfoPanel__miniBtn:hover {
+  background: #ececf2;
+}
+
 @media (prefers-color-scheme: dark) {
   .ceToolbar {
     background: #1f2128;
@@ -254,6 +389,7 @@
 
   .ceToolbar__iconBtn.is-pressed,
   .ceToolbar__iconBtn.is-open,
+  .ceToolbar__select.is-pressed,
   .ceToolbar__select.is-open {
     background: #383b46;
     border-color: #494d59;
@@ -284,6 +420,38 @@
   }
 
   .ceToolbar__dropdownItem.is-selected {
+    background: #383b46;
+  }
+
+  .ceToolbar__discard {
+    border-color: #494d59;
+    color: #f0f0f3;
+  }
+
+  .ceToolbar__discard:hover:not(:disabled) {
+    background: #2d2f37;
+  }
+
+  .ceInfoPanel__section {
+    border-color: #2d2f37;
+  }
+
+  .ceInfoPanel__line,
+  .ceInfoPanel__blockText {
+    color: #c9ccd3;
+  }
+
+  .ceInfoPanel__blockText.is-active {
+    color: #a99bff;
+  }
+
+  .ceInfoPanel__miniBtn {
+    background: #2d2f37;
+    border-color: #494d59;
+    color: #d5d8de;
+  }
+
+  .ceInfoPanel__miniBtn:hover {
     background: #383b46;
   }
 }

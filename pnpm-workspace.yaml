@@ -1,0 +1,8 @@
+minimumReleaseAge: 21600
+
+allowBuilds:
+  core-js: false
+  core-js-pure: false
+
+minimumReleaseAgeExclude:
+  - '@nutrient-sdk/viewer@1.18.0-nightly.20260709'

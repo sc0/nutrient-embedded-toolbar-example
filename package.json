@@ -20,16 +20,16 @@
   "readme": "https://www.nutrient.io/guides/web",
   "scripts": {
     "verify-installation": "node scripts/verify-install.js && node scripts/copy-nutrient-files.js",
-    "prestart": "npm run verify-installation",
+    "prestart": "pnpm run verify-installation",
     "start": "react-scripts start",
-    "prebuild": "npm run verify-installation",
+    "prebuild": "pnpm run verify-installation",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "start:e2e": "npm run start"
+    "start:e2e": "pnpm start"
   },
   "dependencies": {
-    "@nutrient-sdk/viewer": "1.16.0-nightly.20260603",
+    "@nutrient-sdk/viewer": "1.18.0-nightly.20260709",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

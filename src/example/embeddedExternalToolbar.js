@@ -1,5 +1,33 @@
 import React from "react";
 
+// ─────────────────────────────────────────────────────────────────────────
+// Embedded external toolbar — headless content editing
+//
+// This example drives the content editor entirely through the headless
+// `instance.contentEditor` namespace and the `contentEditor.stateChange`
+// event, plus the session-level helpers on `Instance`:
+//
+//   Session:      instance.contentEditor.isActive()
+//                 instance.saveContentEditingSession()
+//                 instance.discardContentEditingSession()
+//                 instance.hasUnsavedContentEditingChanges()
+//                 instance.exportContentEditorPDF()
+//   Blocks:       getBlocks() / getBlock() / getActiveBlock() / getSelectedBlock()
+//                 selectBlock() / focusBlock()
+//                 createTextBlock() / deleteBlock() / deleteActiveBlock()
+//                 enterCreateMode() / exitCreateMode() / isInCreateMode()
+//   Text:         getCurrentStyle() / setTextStyle({ bold, italic,
+//                   strikethrough, family, size, color })
+//                 selectAllText() / setTextSelection() / insertText()
+//                 setListFormatting()
+//   Layout:       setLayout({ alignment, lineSpacingFactor, maxWidth })
+//   History:      undo() / redo() / canUndo()
+//   Fonts:        getAvailableFonts() / getFontMismatches() / getSubsetFonts()
+//
+// `exportContentEditorPDF()` is standalone-only, so run this example in
+// standalone mode to download an in-session snapshot.
+// ─────────────────────────────────────────────────────────────────────────
+
 let PSPDFKit = null;
 
 async function getNutrientViewer() {
@@ -25,27 +53,35 @@ const PARAGRAPH_STYLE_PRESETS = [
   {
     id: "body",
     label: "Body Text",
-    textStyle: { bold: false, italic: false, size: 16 },
+    textStyle: { bold: false, italic: false, strikethrough: false, size: 16 },
     layout: { lineSpacingFactor: 1.5 },
   },
   {
     id: "h1",
     label: "Heading 1",
-    textStyle: { bold: true, italic: false, size: 32 },
+    textStyle: { bold: true, italic: false, strikethrough: false, size: 32 },
     layout: { lineSpacingFactor: 1.15 },
   },
   {
     id: "h2",
     label: "Heading 2",
-    textStyle: { bold: true, italic: false, size: 24 },
+    textStyle: { bold: true, italic: false, strikethrough: false, size: 24 },
     layout: { lineSpacingFactor: 1.15 },
   },
   {
     id: "h3",
     label: "Heading 3",
-    textStyle: { bold: true, italic: false, size: 20 },
+    textStyle: { bold: true, italic: false, strikethrough: false, size: 20 },
     layout: { lineSpacingFactor: 1.15 },
   },
+];
+
+// Signer placeholders inserted via `insertText()` at the cursor of the active
+// text block.
+const INSERT_SNIPPETS = [
+  { id: "signer-name", label: "{{SignerName}}", text: "{{SignerName}}" },
+  { id: "date", label: "{{Date}}", text: "{{Date}}" },
+  { id: "signature-line", label: "Signature line", text: "\nX ____________________" },
 ];
 
 function createDocumentEditorDownloadProxy() {
@@ -125,19 +161,41 @@ function renderContentEditingToolbar(getInstance) {
   const undoBtn = makeIconButton("undo", "↺", "Undo");
   const redoBtn = makeIconButton("redo", "↻", "Redo");
 
+  const addBtn = makeSelectButton(makeAddGlyph(), { compact: true, ariaLabel: "Add text block" });
+  const deleteBtn = makeIconButton("delete", makeTrashGlyph(), "Delete block");
+
   const bodyTextSelect = makeSelectButton("Body Text");
   const fontSelect = makeSelectButton("Arial");
   const sizeSelect = makeSelectButton("16");
 
   const boldBtn = makeToggleButton("bold", makeBoldGlyph(), "Bold");
   const italicBtn = makeToggleButton("italic", makeItalicGlyph(), "Italic");
-  const strikeBtn = makeToggleButton("strike", makeStrikeGlyph(), "Strikethrough");
+  const strikeBtn = makeToggleButton("strikethrough", makeStrikethroughGlyph(), "Strikethrough");
 
   const colorBtn = makeColorButton(getInstance);
 
-  const alignBtn = makeSelectButton(makeAlignGlyph(), { compact: true });
-  const lineHeightBtn = makeSelectButton(makeLineHeightGlyph(), { compact: true });
-  const listBtn = makeSelectButton(makeListGlyph(), { compact: true });
+  const alignBtn = makeSelectButton(makeAlignGlyph(), { compact: true, ariaLabel: "Alignment" });
+  const lineHeightBtn = makeSelectButton(makeLineHeightGlyph(), {
+    compact: true,
+    ariaLabel: "Line height",
+  });
+  const listBtn = makeSelectButton(makeListGlyph(), { compact: true, ariaLabel: "List" });
+
+  const selectionBtn = makeSelectButton(makeSelectionGlyph(), {
+    compact: true,
+    ariaLabel: "Selection",
+  });
+  const insertBtn = makeSelectButton(makeInsertGlyph(), { compact: true, ariaLabel: "Insert text" });
+  const infoBtn = makeIconButton("info", makeInfoGlyph(), "Document & font info");
+
+  const dirtyDot = document.createElement("span");
+  dirtyDot.className = "ceToolbar__dirtyDot";
+  dirtyDot.title = "Unsaved changes";
+
+  const discardBtn = document.createElement("button");
+  discardBtn.className = "ceToolbar__discard";
+  discardBtn.type = "button";
+  discardBtn.textContent = "Discard";
 
   const saveBtn = document.createElement("button");
   saveBtn.className = "ceToolbar__save";
@@ -145,14 +203,29 @@ function renderContentEditingToolbar(getInstance) {
   saveBtn.textContent = "Save";
 
   const groupHistory = makeGroup([undoBtn, redoBtn]);
+  const groupBlocks = makeGroup([addBtn, deleteBtn]);
   const groupParagraph = makeGroup([bodyTextSelect]);
   const groupFont = makeGroup([fontSelect, sizeSelect]);
   const groupInline = makeGroup([boldBtn, italicBtn, strikeBtn, colorBtn]);
-  const groupBlock = makeGroup([alignBtn, lineHeightBtn, listBtn]);
+  const groupBlockLayout = makeGroup([alignBtn, lineHeightBtn, listBtn]);
+  const groupText = makeGroup([selectionBtn, insertBtn]);
+  const groupInspect = makeGroup([infoBtn]);
 
-  inner.append(groupHistory, groupParagraph, groupFont, groupInline, groupBlock);
+  inner.append(
+    groupHistory,
+    groupBlocks,
+    groupParagraph,
+    groupFont,
+    groupInline,
+    groupBlockLayout,
+    groupText,
+    groupInspect,
+  );
 
-  root.append(saveBtn);
+  const actions = document.createElement("div");
+  actions.className = "ceToolbar__actions";
+  actions.append(dirtyDot, discardBtn, saveBtn);
+  root.append(actions);
 
   // The SDK invokes `render()` once, before the instance is necessarily
   // available. Poll until `getInstance()` returns the loaded instance, then
@@ -166,6 +239,8 @@ function renderContentEditingToolbar(getInstance) {
     bindToolbar(viewerInstance, root, {
       undoBtn,
       redoBtn,
+      addBtn,
+      deleteBtn,
       boldBtn,
       italicBtn,
       strikeBtn,
@@ -176,6 +251,11 @@ function renderContentEditingToolbar(getInstance) {
       alignBtn,
       lineHeightBtn,
       listBtn,
+      selectionBtn,
+      insertBtn,
+      infoBtn,
+      dirtyDot,
+      discardBtn,
       saveBtn,
     });
   };
@@ -197,6 +277,8 @@ function bindToolbar(viewerInstance, root, els) {
   const {
     undoBtn,
     redoBtn,
+    addBtn,
+    deleteBtn,
     boldBtn,
     italicBtn,
     strikeBtn,
@@ -207,112 +289,77 @@ function bindToolbar(viewerInstance, root, els) {
     alignBtn,
     lineHeightBtn,
     listBtn,
+    selectionBtn,
+    insertBtn,
+    infoBtn,
+    dirtyDot,
+    discardBtn,
     saveBtn,
   } = els;
 
+  const ce = () => viewerInstance.contentEditor;
+
   // ── Subscribe to state changes and reflect them onto the controls ──
-  let strikeStateRequest = 0;
   let currentToolbarStyle = null;
+  let currentAlignment = null;
+  let currentLineSpacing = null;
 
   const setTriggerLabel = (trigger, text) => {
     const el = trigger.querySelector(".ceToolbar__selectLabel");
     if (el) el.textContent = text;
   };
 
-  const waitForNextFrame = () =>
-    new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
-
-  const waitForContentEditorStateChange = () =>
-    new Promise((resolve) => {
-      const timeout = window.setTimeout(done, 150);
-
-      function done() {
-        window.clearTimeout(timeout);
-        viewerInstance.removeEventListener("contentEditor.stateChange", done);
-        resolve();
-      }
-
-      viewerInstance.addEventListener("contentEditor.stateChange", done);
-    });
-
-  const getFocusedTextArea = () => {
-    const doc = viewerInstance.contentDocument || document;
-    const activeElement = doc.activeElement;
-
-    if (activeElement?.tagName === "TEXTAREA") return activeElement;
-
-    return doc.querySelector("textarea:focus") || doc.querySelector("textarea");
-  };
-
-  const selectWholeActiveBlockText = async () => {
-    // Give React a chance to re-render the text block after `focusBlock()`.
-    await waitForNextFrame();
-    await waitForNextFrame();
-
-    const textarea = getFocusedTextArea();
-
-    if (!textarea) return;
-
-    textarea.focus();
-
-    // Start listening before dispatching the shortcut so we don't miss a fast
-    // state update.
-    const selectionChange = waitForContentEditorStateChange();
-
-    textarea.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "a",
-        code: "KeyA",
-        ctrlKey: true,
-        metaKey: true,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
-
-    // The shortcut updates the SDK selection asynchronously via WASM; wait for
-    // the resulting state update (or a short fallback timeout) before applying
-    // the style so `setTextStyle()` sees a non-empty selection.
-    await selectionChange;
-  };
-
   const applySnapshot = (snapshot) => {
     const isActive = !!snapshot?.isActive;
     const blockId = snapshot?.activeBlockId || snapshot?.selectedBlockId || null;
-    const selectedBlock = blockId ? viewerInstance.contentEditor.getBlock(blockId) : null;
+    const selectedBlock = blockId ? ce().getBlock(blockId) : null;
     const style = snapshot?.currentStyle ?? selectedBlock?.style ?? null;
     currentToolbarStyle = style;
+
+    // Alignment and line spacing are reported through `currentStyle` for the
+    // cursor/selection and through `getBlock(id).layout` at block level.
+    currentAlignment =
+      snapshot?.currentStyle?.alignment ?? selectedBlock?.layout?.alignment ?? null;
+    currentLineSpacing =
+      snapshot?.currentStyle?.lineSpacingFactor ?? selectedBlock?.layout?.lineSpacingFactor ?? null;
 
     // Enable formatting/layout controls whenever a content editing session is
     // active. Clicks fall through to no-ops at the API layer when no specific
     // block is in edit mode, so the user doesn't have to think about that.
-    setDisabled(boldBtn, !isActive);
-    setDisabled(italicBtn, !isActive);
-    setDisabled(strikeBtn, !isActive);
-    setDisabled(colorBtn, !isActive);
-    setDisabled(fontSelect, !isActive);
-    setDisabled(sizeSelect, !isActive);
-    setDisabled(bodyTextSelect, !isActive);
-    setDisabled(alignBtn, !isActive);
-    setDisabled(lineHeightBtn, !isActive);
-    setDisabled(listBtn, !isActive);
-    setDisabled(undoBtn, !isActive);
-    setDisabled(redoBtn, !isActive);
+    for (const btn of [
+      boldBtn,
+      italicBtn,
+      strikeBtn,
+      colorBtn,
+      fontSelect,
+      sizeSelect,
+      bodyTextSelect,
+      alignBtn,
+      lineHeightBtn,
+      listBtn,
+      selectionBtn,
+      insertBtn,
+      infoBtn,
+      addBtn,
+    ]) {
+      setDisabled(btn, !isActive);
+    }
+
+    // Delete only makes sense with a target block.
+    setDisabled(deleteBtn, !isActive || !blockId);
+
+    // canUndo() reports whether a block can receive history commands; redo
+    // availability is not reported separately (core exposes no stack depth),
+    // so the redo button follows the same signal.
+    setDisabled(undoBtn, !isActive || !ce().canUndo());
+    setDisabled(redoBtn, !isActive || !ce().canUndo());
+
+    // Reflect create-mode as a pressed state on the Add button.
+    setPressed(addBtn, isActive && ce().isInCreateMode());
 
     setPressed(boldBtn, !!style?.bold);
     setPressed(italicBtn, !!style?.italic);
-
-    const requestId = ++strikeStateRequest;
-
-    if (selectedBlock) {
-      getStrikeoutAnnotationsForBlock(viewerInstance, selectedBlock).then((annotations) => {
-        if (requestId === strikeStateRequest) {
-          setPressed(strikeBtn, annotations.size > 0);
-        }
-      });
-    } else {
-      setPressed(strikeBtn, false);
-    }
+    setPressed(strikeBtn, !!style?.strikethrough);
 
     // Update labels only when the snapshot reports a concrete value. For an
     // active block, `currentStyle` is the cursor/selection style. For a block
@@ -329,7 +376,12 @@ function bindToolbar(viewerInstance, root, els) {
 
     setSwatch(colorBtn, style?.color ?? "#1a1a1a");
 
+    // Session-level dirty flag drives the unsaved-changes indicator.
+    const dirty = isActive && !!snapshot?.isDirty;
+    dirtyDot.classList.toggle("is-visible", dirty);
+
     saveBtn.disabled = !isActive;
+    discardBtn.disabled = !isActive;
   };
 
   const applyVisibility = () => {
@@ -338,38 +390,57 @@ function bindToolbar(viewerInstance, root, els) {
     root.style.display = inContentEditor ? "" : "none";
   };
 
+  let didConnect = false;
+  let observer = null;
+
+  function cleanupToolbar() {
+    viewerInstance.removeEventListener("contentEditor.stateChange", onStateChange);
+    viewerInstance.removeEventListener("viewState.change", onViewStateChange);
+    observer?.disconnect();
+  }
+
+  // The toolbar can be mounted inside the viewer's shadow/document tree, so
+  // `document.body.contains(root)` may be false even while the toolbar is
+  // still connected. Track connectivity via `isConnected` and only clean up
+  // after the node was seen connected once — otherwise the listeners would be
+  // removed right after save, preventing the toolbar from appearing again when
+  // content editing is re-entered.
+  const checkConnected = () => {
+    if (root.isConnected) {
+      didConnect = true;
+      return true;
+    }
+    if (didConnect) {
+      cleanupToolbar();
+      return false;
+    }
+    return true;
+  };
+
   const refresh = () => {
+    if (!checkConnected()) return;
     applyVisibility();
     applySnapshot(buildInitialSnapshot(viewerInstance));
   };
 
   refresh();
 
-  const onChange = () => refresh();
+  // `contentEditor.stateChange` delivers a complete, deduplicated snapshot of
+  // the session state (active/dirty flags, block ids, current style), so the
+  // event payload alone drives the toolbar. `viewState.change` only toggles
+  // visibility when the interaction mode flips.
+  const onStateChange = (snapshot) => {
+    if (!checkConnected()) return;
+    applyVisibility();
+    applySnapshot(snapshot);
+  };
   const onViewStateChange = () => refresh();
 
-  // We listen to `contentEditor.stateChange` (precise, fires once per relevant
-  // state delta) AND fall back on a low-frequency poll. The poll guarantees
-  // the UI stays consistent even if an event is missed during the first few
-  // ticks of session activation.
-  viewerInstance.addEventListener("contentEditor.stateChange", onChange);
+  viewerInstance.addEventListener("contentEditor.stateChange", onStateChange);
   viewerInstance.addEventListener("viewState.change", onViewStateChange);
-  const pollId = window.setInterval(refresh, 250);
 
-  // Clean up the listeners and poll when the slot's DOM node is removed.
-  const observer = new MutationObserver(() => {
-    // The toolbar can be mounted inside the viewer's shadow/document tree, so
-    // `document.body.contains(root)` may be false even while the toolbar is
-    // still connected. Use `isConnected` to avoid removing the listeners/poll
-    // after save, which would prevent the toolbar from appearing again when
-    // content editing is re-entered.
-    if (!root.isConnected) {
-      viewerInstance.removeEventListener("contentEditor.stateChange", onChange);
-      viewerInstance.removeEventListener("viewState.change", onViewStateChange);
-      window.clearInterval(pollId);
-      observer.disconnect();
-    }
-  });
+  // Clean up the listeners when the slot's DOM node is removed.
+  observer = new MutationObserver(() => checkConnected());
   observer.observe(document.body, { childList: true, subtree: true });
 
   // ── Wire interactions ──────────────────────────────────────────────
@@ -380,11 +451,11 @@ function bindToolbar(viewerInstance, root, els) {
   // it to Active first via `focusBlock` so style changes land on the
   // intended block.
   const ensureActiveBlock = () => {
-    const activeId = viewerInstance.contentEditor.getActiveBlock();
+    const activeId = ce().getActiveBlock();
     if (activeId) return activeId;
-    const selectedId = viewerInstance.contentEditor.getSelectedBlock();
+    const selectedId = ce().getSelectedBlock();
     if (selectedId) {
-      viewerInstance.contentEditor.focusBlock(selectedId);
+      ce().focusBlock(selectedId);
       return selectedId;
     }
     return null;
@@ -392,80 +463,83 @@ function bindToolbar(viewerInstance, root, els) {
 
   // `setTextStyle()` applies to the current text selection inside an active
   // block. For the "whole block is selected" case (single-clicked block,
-  // not editing a text range), the toolbar promotes the block to Active and
-  // selects the block's entire text before applying the style. If a block is
-  // already Active, we leave its current cursor/range untouched so formatting
-  // still works for a particular text selection.
+  // not editing a text range), the toolbar selects the block's entire text via
+  // `selectAllText()` — which also promotes the block to Active — before
+  // applying the style. If a block is already Active, we leave its current
+  // cursor/range untouched so formatting still works for a particular text
+  // selection.
   const applyStyleToCurrentTarget = async (style) => {
-    const activeId = viewerInstance.contentEditor.getActiveBlock();
+    const activeId = ce().getActiveBlock();
 
     if (activeId) {
-      viewerInstance.contentEditor.setTextStyle(style);
+      ce().setTextStyle(style);
       return activeId;
     }
 
-    const selectedId = viewerInstance.contentEditor.getSelectedBlock();
+    const selectedId = ce().getSelectedBlock();
 
     if (!selectedId) return null;
 
-    viewerInstance.contentEditor.focusBlock(selectedId);
-    await selectWholeActiveBlockText();
-    viewerInstance.contentEditor.setTextStyle(style);
+    await ce().selectAllText(selectedId);
+    ce().setTextStyle(style);
+
+    return selectedId;
+  };
+
+  const applyTextCommandToCurrentTarget = async (command) => {
+    const activeId = ce().getActiveBlock();
+
+    if (activeId) {
+      await command();
+      return activeId;
+    }
+
+    const selectedId = ce().getSelectedBlock();
+
+    if (!selectedId) return null;
+
+    ce().focusBlock(selectedId);
+    await command();
 
     return selectedId;
   };
 
   const applyParagraphStylePreset = async (preset) => {
-    const targetId =
-      viewerInstance.contentEditor.getActiveBlock() || viewerInstance.contentEditor.getSelectedBlock();
+    const targetId = ce().getActiveBlock() || ce().getSelectedBlock();
 
     if (!targetId) return false;
 
-    if (!viewerInstance.contentEditor.getActiveBlock()) {
-      viewerInstance.contentEditor.focusBlock(targetId);
-    }
-
     // Paragraph presets are block-level controls: applying "Heading 1" should
     // update the complete text block, not just the cursor insertion style or a
-    // partial text selection.
-    await selectWholeActiveBlockText();
-    viewerInstance.contentEditor.setTextStyle(preset.textStyle);
+    // partial text selection. `selectAllText()` activates the block if needed.
+    await ce().selectAllText(targetId);
+    ce().setTextStyle(preset.textStyle);
+    await ce().setLayout(targetId, preset.layout);
 
     return true;
   };
 
+  // ── History ────────────────────────────────────────────────────────
   undoBtn.addEventListener("click", () => {
     if (!ensureActiveBlock()) return;
-    viewerInstance.contentEditor.undo();
+    ce().undo();
   });
   redoBtn.addEventListener("click", () => {
     if (!ensureActiveBlock()) return;
-    viewerInstance.contentEditor.redo();
+    ce().redo();
   });
 
+  // ── Inline styles ──────────────────────────────────────────────────
   boldBtn.addEventListener("click", () => {
-    const style = viewerInstance.contentEditor.getCurrentStyle();
-    applyStyleToCurrentTarget({ bold: !style?.bold });
+    void applyStyleToCurrentTarget({ bold: !ce().getCurrentStyle()?.bold });
   });
 
   italicBtn.addEventListener("click", () => {
-    const style = viewerInstance.contentEditor.getCurrentStyle();
-    applyStyleToCurrentTarget({ italic: !style?.italic });
+    void applyStyleToCurrentTarget({ italic: !ce().getCurrentStyle()?.italic });
   });
 
-  strikeBtn.addEventListener("click", async () => {
-    const targetId =
-      viewerInstance.contentEditor.getActiveBlock() || viewerInstance.contentEditor.getSelectedBlock();
-
-    if (!targetId) return;
-
-    const enabled = await toggleBlockStrikethrough(viewerInstance, targetId);
-    setPressed(strikeBtn, enabled);
-  });
-
-  colorBtn.addEventListener("click", () => {
-    const colorInput = colorBtn.querySelector("input[type='color']");
-    colorInput?.click();
+  strikeBtn.addEventListener("click", () => {
+    void applyStyleToCurrentTarget({ strikethrough: !ce().getCurrentStyle()?.strikethrough });
   });
 
   // Update the color input's onInput handler too — the existing one in
@@ -478,11 +552,48 @@ function bindToolbar(viewerInstance, root, els) {
     fresh.addEventListener("input", (event) => {
       const value = event.target.value;
       setSwatch(colorBtn, value);
-      applyStyleToCurrentTarget({ color: value });
+      void applyStyleToCurrentTarget({ color: value });
     });
   }
 
-  // ── Dropdown menus ─────────────────────────────────────────────────
+  // ── Blocks: create-mode + direct create ────────────────────────────
+  attachDropdown(root, addBtn, {
+    getItems: () => [
+      { id: "draw", label: ce().isInCreateMode() ? "Stop drawing text boxes" : "Draw a text box" },
+      { id: "center", label: "Add a text box at page center" },
+    ],
+    getSelectedId: () => (ce().isInCreateMode() ? "draw" : null),
+    onSelect: async (item) => {
+      if (item.id === "draw") {
+        // enterCreateMode / exitCreateMode / isInCreateMode
+        if (ce().isInCreateMode()) ce().exitCreateMode();
+        else ce().enterCreateMode();
+        return;
+      }
+
+      // createTextBlock returns the id of the new block; focus it so the user
+      // can type straight away.
+      const pageIndex = viewerInstance.viewState.currentPageIndex ?? 0;
+      const { width, height } = viewerInstance.pageInfoForIndex(pageIndex);
+      const newId = await ce().createTextBlock({
+        pageIndex,
+        anchor: { x: width / 2, y: height / 2 },
+      });
+      ce().focusBlock(newId);
+    },
+  });
+
+  // ── Blocks: delete ─────────────────────────────────────────────────
+  deleteBtn.addEventListener("click", async () => {
+    if (!ce().getActiveBlock() && !ce().getSelectedBlock()) return;
+    try {
+      await ce().deleteActiveBlock();
+    } catch (err) {
+      console.error("Failed to delete block:", err);
+    }
+  });
+
+  // ── Paragraph presets ──────────────────────────────────────────────
   attachDropdown(root, bodyTextSelect, {
     getItems: () => PARAGRAPH_STYLE_PRESETS,
     getSelectedId: () => bodyTextSelect.dataset.selectedId ?? "body",
@@ -501,20 +612,23 @@ function bindToolbar(viewerInstance, root, els) {
         setTriggerLabel(sizeSelect, String(item.textStyle.size));
         setPressed(boldBtn, item.textStyle.bold);
         setPressed(italicBtn, item.textStyle.italic);
-        lineHeightBtn.dataset.selectedId = String(item.layout.lineSpacingFactor);
+        setPressed(strikeBtn, !!item.textStyle.strikethrough);
       }
     },
   });
 
+  // ── Font family (getAvailableFonts) ────────────────────────────────
   attachDropdown(root, fontSelect, {
     getItems: () => {
-      const fonts = viewerInstance.contentEditor.getAvailableFonts();
-      const families = Array.from(new Set(fonts.map((f) => f.family))).sort();
+      const fonts = ce().getAvailableFonts();
+      const families = Array.from(new Set(fonts.map((f) => f.family))).sort((a, b) =>
+        a.localeCompare(b),
+      );
       return families.map((family) => ({ id: family, label: family }));
     },
     getSelectedId: () => currentToolbarStyle?.family ?? null,
     onSelect: (item) => {
-      applyStyleToCurrentTarget({ family: item.id });
+      void applyStyleToCurrentTarget({ family: item.id });
       // Update the trigger immediately; the snapshot-driven refresh would only
       // beat us to it on the synchronous code path, and even there
       // selectionStyleInfo can shadow the just-applied value.
@@ -523,6 +637,7 @@ function bindToolbar(viewerInstance, root, els) {
     itemStyle: (item) => ({ fontFamily: item.id }),
   });
 
+  // ── Font size ──────────────────────────────────────────────────────
   attachDropdown(root, sizeSelect, {
     getItems: () =>
       [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64].map((size) => ({
@@ -535,11 +650,12 @@ function bindToolbar(viewerInstance, root, els) {
       return typeof size === "number" ? String(size) : null;
     },
     onSelect: (item) => {
-      applyStyleToCurrentTarget({ size: item.meta });
+      void applyStyleToCurrentTarget({ size: item.meta });
       setTriggerLabel(sizeSelect, item.label);
     },
   });
 
+  // ── Alignment (setLayout) ──────────────────────────────────────────
   attachDropdown(root, alignBtn, {
     getItems: () => [
       { id: "begin", label: "Left" },
@@ -547,13 +663,15 @@ function bindToolbar(viewerInstance, root, els) {
       { id: "end", label: "Right" },
       { id: "justified", label: "Justify" },
     ],
-    getSelectedId: () => alignBtn.dataset.selectedId ?? null,
+    getSelectedId: () => currentAlignment,
     onSelect: async (item) => {
-      // No SDK-side backing for alignment yet — track selection locally.
-      alignBtn.dataset.selectedId = item.id;
+      const targetId = ensureActiveBlock();
+      if (!targetId) return;
+      await ce().setLayout(targetId, { alignment: item.id });
     },
   });
 
+  // ── Line height (setLayout) ────────────────────────────────────────
   attachDropdown(root, lineHeightBtn, {
     getItems: () =>
       [1, 1.15, 1.5, 2].map((factor) => ({
@@ -561,15 +679,20 @@ function bindToolbar(viewerInstance, root, els) {
         label: `${factor}×`,
         meta: factor,
       })),
-    getSelectedId: () => {
-      return lineHeightBtn.dataset.selectedId ?? null;
-    },
+    getSelectedId: () =>
+      // Match against the preset factors while tolerating float noise from the
+      // reported layout state.
+      typeof currentLineSpacing === "number"
+        ? String(Math.round(currentLineSpacing * 100) / 100)
+        : null,
     onSelect: async (item) => {
-      // No SDK-side backing for yet — track selection locally.
-      lineHeightBtn.dataset.selectedId = item.id;
+      const targetId = ensureActiveBlock();
+      if (!targetId) return;
+      await ce().setLayout(targetId, { lineSpacingFactor: item.meta });
     },
   });
 
+  // ── List formatting (setListFormatting) ────────────────────────────
   attachDropdown(root, listBtn, {
     getItems: () => [
       { id: "none", label: "No list" },
@@ -577,12 +700,72 @@ function bindToolbar(viewerInstance, root, els) {
       { id: "numbered", label: "Numbered" },
     ],
     getSelectedId: () => listBtn.dataset.selectedId ?? "none",
-    onSelect: (item) => {
-      // No SDK-side backing for list styles yet — track selection locally.
-      listBtn.dataset.selectedId = item.id;
+    onSelect: async (item) => {
+      const targetId = await applyTextCommandToCurrentTarget(() =>
+        ce().setListFormatting(item.id),
+      );
+
+      if (targetId) listBtn.dataset.selectedId = item.id;
     },
   });
 
+  // ── Selection (selectAllText / setTextSelection) ───────────────────
+  attachDropdown(root, selectionBtn, {
+    getItems: () => [
+      { id: "all", label: "Select all text" },
+      { id: "first-line", label: "Select first line" },
+      { id: "clear", label: "Clear selection" },
+    ],
+    getSelectedId: () => null,
+    onSelect: (item) => {
+      const targetId = ensureActiveBlock();
+      if (!targetId) return;
+
+      if (item.id === "all") {
+        // selectAllText works whether or not the block is already Active.
+        ce().selectAllText(targetId);
+        return;
+      }
+
+      if (item.id === "clear") {
+        // setTextSelection(id, null) clears the selection.
+        ce().setTextSelection(targetId, null);
+        return;
+      }
+
+      // setTextSelection(id, { begin, end }) over a character range.
+      const block = ce().getBlock(targetId);
+      const text = block?.text ?? "";
+      const newline = text.indexOf("\n");
+      const end = newline === -1 ? text.length : newline;
+      ce().setTextSelection(targetId, { begin: 0, end });
+    },
+  });
+
+  // ── Insert text (insertText) ───────────────────────────────────────
+  attachDropdown(root, insertBtn, {
+    getItems: () => INSERT_SNIPPETS,
+    getSelectedId: () => null,
+    onSelect: (item) => {
+      // `focusBlock()` inside ensureActiveBlock takes effect synchronously, so
+      // the block is Active by the time `insertText()` runs.
+      if (!ensureActiveBlock()) return;
+      ce().insertText(item.text);
+    },
+  });
+
+  // ── Introspection panel ────────────────────────────────────────────
+  infoBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (infoBtn.dataset.open === "true") {
+      closeOpenDropdown();
+      return;
+    }
+    closeOpenDropdown();
+    openInfoPanel(root, infoBtn, viewerInstance);
+  });
+
+  // ── Session save / discard ─────────────────────────────────────────
   saveBtn.addEventListener("click", () => {
     viewerInstance
       .saveContentEditingSession()
@@ -591,13 +774,208 @@ function bindToolbar(viewerInstance, root, els) {
         console.error("Failed to save content editing session:", err);
       });
   });
+
+  discardBtn.addEventListener("click", () => {
+    if (viewerInstance.hasUnsavedContentEditingChanges()) {
+      const ok = window.confirm("Discard all unsaved content editing changes?");
+      if (!ok) return;
+    }
+    viewerInstance
+      .discardContentEditingSession()
+      .then(() => refresh())
+      .catch((err) => console.error("Failed to discard content editing session:", err));
+  });
+}
+
+// ── Introspection panel (getBlocks / getBlock / getActiveBlock /
+//    getSelectedBlock / selectBlock / focusBlock / deleteBlock /
+//    getCurrentStyle / getFontMismatches / getSubsetFonts /
+//    getAvailableFonts) ──────────────────────────────────────────────────
+function openInfoPanel(toolbarRoot, trigger, viewerInstance) {
+  const ce = viewerInstance.contentEditor;
+
+  const panel = document.createElement("div");
+  panel.className = "ceToolbar__dropdown ceInfoPanel";
+
+  const rebuild = () => {
+    panel.innerHTML = "";
+
+    const pageIndex = viewerInstance.viewState.currentPageIndex ?? 0;
+    const pageBlocks = ce.getBlocks(pageIndex);
+    const allBlocks = ce.getBlocks();
+    const activeId = ce.getActiveBlock();
+    const selectedId = ce.getSelectedBlock();
+    const style = ce.getCurrentStyle();
+    const fonts = ce.getAvailableFonts();
+    const mismatches = ce.getFontMismatches();
+    const subsets = ce.getSubsetFonts();
+
+    panel.appendChild(
+      makeInfoSection("Session", [
+        `Active: ${ce.isActive() ? "yes" : "no"}`,
+        `Blocks on page ${pageIndex + 1}: ${pageBlocks.length}`,
+        `Blocks in document: ${allBlocks.length}`,
+        `Active block: ${activeId ?? "—"}`,
+        `Selected block: ${selectedId ?? "—"}`,
+      ]),
+    );
+
+    if (style) {
+      panel.appendChild(
+        makeInfoSection("Current style", [
+          `Font: ${style.family ?? "mixed"}`,
+          `Size: ${style.size ?? "mixed"}`,
+          `Bold: ${describeTri(style.bold)}  Italic: ${describeTri(style.italic)}  Strike: ${describeTri(style.strikethrough)}`,
+          `Color: ${style.color ?? "mixed"}`,
+          `Align: ${style.alignment ?? "—"}  Line: ${style.lineSpacingFactor ?? "—"}`,
+        ]),
+      );
+    }
+
+    panel.appendChild(
+      makeInfoSection("Fonts", [
+        `Available faces: ${fonts.length}`,
+        `Mismatches: ${mismatches.length}`,
+        ...mismatches.map(
+          (m) => `  • ${m.unavailableFaceName ?? "(unnamed)"} — block ${short(m.textBlockId)}`,
+        ),
+        `Subset fonts: ${subsets.length}`,
+        ...subsets.map((s) => `  • ${s.demangledName} (${s.originalName})`),
+      ]),
+    );
+
+    // Block list with per-block actions.
+    const blocksSection = document.createElement("div");
+    blocksSection.className = "ceInfoPanel__section";
+    const heading = document.createElement("div");
+    heading.className = "ceInfoPanel__heading";
+    heading.textContent = `Text blocks on page ${pageIndex + 1}`;
+    blocksSection.appendChild(heading);
+
+    if (pageBlocks.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "ceInfoPanel__line";
+      empty.textContent = "No blocks detected yet — click into the page.";
+      blocksSection.appendChild(empty);
+    }
+
+    for (const block of pageBlocks) {
+      const row = document.createElement("div");
+      row.className = "ceInfoPanel__block";
+
+      const label = document.createElement("span");
+      label.className = "ceInfoPanel__blockText";
+      const preview = block.text.trim().replace(/\s+/g, " ").slice(0, 32) || "(empty)";
+      label.textContent = preview;
+      if (block.id === activeId) label.classList.add("is-active");
+      else if (block.id === selectedId) label.classList.add("is-selected");
+
+      const selectAction = makeMiniButton("Select", () => {
+        ce.selectBlock(block.id); // Selected state (clicked, not editing).
+        rebuild();
+      });
+      const editAction = makeMiniButton("Edit", () => {
+        ce.focusBlock(block.id); // Active state (cursor inside).
+        rebuild();
+      });
+      const deleteAction = makeMiniButton("Delete", async () => {
+        try {
+          await ce.deleteBlock(block.id); // Delete a specific block by id.
+        } catch (err) {
+          console.error("Failed to delete block:", err);
+        }
+        rebuild();
+      });
+
+      const actions = document.createElement("span");
+      actions.className = "ceInfoPanel__blockActions";
+      actions.append(selectAction, editAction, deleteAction);
+
+      row.append(label, actions);
+      blocksSection.appendChild(row);
+    }
+
+    panel.appendChild(blocksSection);
+  };
+
+  rebuild();
+
+  const rect = trigger.getBoundingClientRect();
+  panel.style.position = "fixed";
+  panel.style.right = `${Math.round(window.innerWidth - rect.right)}px`;
+  panel.style.top = `${Math.round(rect.bottom + 4)}px`;
+  panel.style.zIndex = "9999";
+
+  toolbarRoot.appendChild(panel);
+  trigger.dataset.open = "true";
+  trigger.classList.add("is-open");
+
+  const closeOnOutside = (event) => {
+    if (panel.contains(event.target) || trigger.contains(event.target)) return;
+    closeOpenDropdown();
+  };
+  const closeOnEsc = (event) => {
+    if (event.key === "Escape") closeOpenDropdown();
+  };
+
+  const ownerDocument = toolbarRoot.ownerDocument || document;
+  ownerDocument.addEventListener("mousedown", closeOnOutside, true);
+  ownerDocument.addEventListener("keydown", closeOnEsc, true);
+
+  openDropdownCloser = () => {
+    ownerDocument.removeEventListener("mousedown", closeOnOutside, true);
+    ownerDocument.removeEventListener("keydown", closeOnEsc, true);
+    if (panel.parentNode) panel.parentNode.removeChild(panel);
+    delete trigger.dataset.open;
+    trigger.classList.remove("is-open");
+    openDropdownCloser = null;
+  };
+}
+
+function makeInfoSection(title, lines) {
+  const section = document.createElement("div");
+  section.className = "ceInfoPanel__section";
+
+  const heading = document.createElement("div");
+  heading.className = "ceInfoPanel__heading";
+  heading.textContent = title;
+  section.appendChild(heading);
+
+  for (const line of lines) {
+    const el = document.createElement("div");
+    el.className = "ceInfoPanel__line";
+    el.textContent = line;
+    section.appendChild(el);
+  }
+  return section;
+}
+
+function makeMiniButton(label, onClick) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "ceInfoPanel__miniBtn";
+  btn.textContent = label;
+  btn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    onClick();
+  });
+  return btn;
+}
+
+function describeTri(value) {
+  if (value === null || value === undefined) return "mixed";
+  return value ? "yes" : "no";
+}
+
+function short(id) {
+  return typeof id === "string" ? id.slice(0, 6) : String(id);
 }
 
 // ── Dropdown helper ─────────────────────────────────────────────────────
 
 let openDropdownCloser = null;
 
-function attachDropdown(toolbarRoot, trigger, { getItems, getSelectedId, onSelect, itemStyle }) {
+function attachDropdown(toolbarRoot, trigger, opts) {
   trigger.addEventListener("click", (event) => {
     event.stopPropagation();
 
@@ -607,7 +985,7 @@ function attachDropdown(toolbarRoot, trigger, { getItems, getSelectedId, onSelec
     }
 
     closeOpenDropdown();
-    openDropdown(toolbarRoot, trigger, { getItems, getSelectedId, onSelect, itemStyle });
+    openDropdown(toolbarRoot, trigger, opts);
   });
 }
 
@@ -681,13 +1059,14 @@ function closeOpenDropdown() {
 }
 
 function buildInitialSnapshot(viewerInstance) {
+  const ce = viewerInstance.contentEditor;
   return {
-    isActive: viewerInstance.contentEditor.isActive(),
+    isActive: ce.isActive(),
     isDirty: viewerInstance.hasUnsavedContentEditingChanges(),
     mode: null,
-    activeBlockId: viewerInstance.contentEditor.getActiveBlock(),
-    selectedBlockId: viewerInstance.contentEditor.getSelectedBlock(),
-    currentStyle: viewerInstance.contentEditor.getCurrentStyle(),
+    activeBlockId: ce.getActiveBlock(),
+    selectedBlockId: ce.getSelectedBlock(),
+    currentStyle: ce.getCurrentStyle(),
   };
 }
 
@@ -711,93 +1090,6 @@ function setSwatch(button, color) {
   if (swatch) swatch.style.background = color;
   const input = button.querySelector("input[type='color']");
   if (input) input.value = color;
-}
-
-
-const STRIKEOUT_CUSTOM_DATA_KEY = "embeddedExternalToolbarStrikeoutBlockId";
-
-async function toggleBlockStrikethrough(viewerInstance, blockId) {
-  const block = viewerInstance.contentEditor.getBlock(blockId);
-
-  if (!block || block.type !== "text") return false;
-
-  const existing = await getStrikeoutAnnotationsForBlock(viewerInstance, block);
-
-  if (existing.size > 0) {
-    await viewerInstance.delete(existing.map((annotation) => annotation.id));
-    return false;
-  }
-
-  const rects = makeStrikeoutRects(block);
-
-  if (rects.size === 0) return false;
-
-  await viewerInstance.create(
-    new PSPDFKit.Annotations.StrikeOutAnnotation({
-      pageIndex: block.pageIndex,
-      rects,
-      boundingBox: PSPDFKit.Geometry.Rect.union(rects),
-      color: colorFromHex(block.style.color || "#1a1a1a"),
-      customData: {
-        [STRIKEOUT_CUSTOM_DATA_KEY]: block.id,
-      },
-    }),
-  );
-
-  return true;
-}
-
-async function getStrikeoutAnnotationsForBlock(viewerInstance, block) {
-  const annotations = await viewerInstance.getAnnotations(block.pageIndex);
-
-  return annotations.filter(
-    (annotation) =>
-      annotation instanceof PSPDFKit.Annotations.StrikeOutAnnotation &&
-      annotation.customData?.[STRIKEOUT_CUSTOM_DATA_KEY] === block.id,
-  );
-}
-
-function makeStrikeoutRects(block) {
-  const { left, top, width, height } = block.boundingBox;
-  const fontSize = block.style.size || 12;
-  const approximateLineHeight = Math.max(fontSize * 1.2, 1);
-  const lineCount = Math.max(1, Math.round(height / approximateLineHeight));
-  const rectHeight = height / lineCount;
-  const rects = [];
-
-  for (let index = 0; index < lineCount; index++) {
-    rects.push(
-      new PSPDFKit.Geometry.Rect({
-        left,
-        top: top + index * rectHeight,
-        width,
-        height: rectHeight,
-      }),
-    );
-  }
-
-  return PSPDFKit.Immutable.List(rects);
-}
-
-function colorFromHex(hex) {
-  const normalized = hex.replace("#", "");
-  const value = Number.parseInt(
-    normalized.length === 3
-      ? normalized
-          .split("")
-          .map((char) => `${char}${char}`)
-          .join("")
-      : normalized,
-    16,
-  );
-
-  if (Number.isNaN(value)) return PSPDFKit.Color.BLACK;
-
-  return new PSPDFKit.Color({
-    r: (value >> 16) & 255,
-    g: (value >> 8) & 255,
-    b: value & 255,
-  });
 }
 
 function makeIconButton(id, glyph, ariaLabel) {
@@ -826,6 +1118,7 @@ function makeSelectButton(label, opts = {}) {
   btn.type = "button";
   btn.className = "ceToolbar__select";
   if (opts.compact) btn.classList.add("ceToolbar__select--compact");
+  if (opts.ariaLabel) btn.setAttribute("aria-label", opts.ariaLabel);
 
   const labelEl = document.createElement("span");
   labelEl.className = "ceToolbar__selectLabel";
@@ -889,9 +1182,9 @@ function makeItalicGlyph() {
   );
 }
 
-function makeStrikeGlyph() {
+function makeStrikethroughGlyph() {
   return makeSvg(
-    `<path d="M3 9.25h14v1.5H3v-1.5Zm6.4-4.5c-1.6 0-2.5.8-2.5 1.9 0 .8.4 1.3 1.8 1.6l-1.9.45c-1.1-.5-1.5-1.3-1.5-2.05C5.3 4.7 7 3.5 9.4 3.5c1.6 0 2.85.55 3.4 1.6l-1.4.85c-.4-.65-1.1-1.2-2-1.2Zm.5 6.55 1.9-.45c1.1.5 1.5 1.3 1.5 2.05 0 1.95-1.7 3.1-4.1 3.1-1.7 0-3-.55-3.55-1.65l1.4-.85c.4.7 1.2 1.2 2.15 1.2 1.55 0 2.5-.7 2.5-1.8 0-.8-.4-1.3-1.8-1.6Z" fill="currentColor"/>`,
+    `<path d="M3 9.25h14v1.5H3v-1.5Zm7-5.75c1.9 0 3.4 1 3.9 2.6l-1.45.5C12.1 5.6 11.2 5 10 5c-1.3 0-2.25.65-2.25 1.6 0 .7.5 1.1 1.5 1.4h-2.6A2.6 2.6 0 0 1 6.25 6.5C6.25 4.7 7.8 3.5 10 3.5Zm.8 8.5c1.1.3 1.7.75 1.7 1.55 0 1-1 1.7-2.4 1.7-1.55 0-2.6-.7-3-1.95l-1.5.5C6.1 15.4 7.75 16.5 10.1 16.5c2.35 0 4-1.2 4-3 0-.6-.18-1.1-.5-1.5h-2.8Z" fill="currentColor"/>`,
   );
 }
 
@@ -910,6 +1203,36 @@ function makeLineHeightGlyph() {
 function makeListGlyph() {
   return makeSvg(
     `<path d="M7 4.5h10V6H7V4.5Zm0 4.75h10v1.5H7v-1.5ZM7 14h10v1.5H7V14ZM4.5 5.25a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Zm0 4.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Zm0 4.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" fill="currentColor"/>`,
+  );
+}
+
+function makeAddGlyph() {
+  return makeSvg(
+    `<path d="M4 4h12v1.6H4V4Zm0 4.2h8v1.6H4V8.2Zm0 4.2h6V14H4v-1.6Zm10.25-1.2h1.5v2.55H18.3v1.5h-2.55V18h-1.5v-2.45H11.7v-1.5h2.55V11.2Z" fill="currentColor"/>`,
+  );
+}
+
+function makeTrashGlyph() {
+  return makeSvg(
+    `<path d="M8 3h4a1 1 0 0 1 1 1v1h3v1.5h-1.1l-.7 8.7A2 2 0 0 1 12.2 18H7.8a2 2 0 0 1-2-1.8l-.7-8.7H4V5h3V4a1 1 0 0 1 1-1Zm.5 2h3V4.5h-3V5Zm-1.85 1.5.66 8.55a.5.5 0 0 0 .5.45h4.38a.5.5 0 0 0 .5-.45l.66-8.55H6.65ZM8.75 8h1.5v6h-1.5V8Zm2.5 0h1.5v6h-1.5V8Z" fill="currentColor"/>`,
+  );
+}
+
+function makeSelectionGlyph() {
+  return makeSvg(
+    `<path d="M3 3h4v1.6H4.6V7H3V3Zm10 0h4v4h-1.6V4.6H13V3ZM3 13h1.6v2.4H7V17H3v-4Zm13.4 0H17v4h-4v-1.6h2.4V13ZM6.5 6.5h7v7h-7v-7Zm1.5 1.5v4h4v-4H8Z" fill="currentColor"/>`,
+  );
+}
+
+function makeInsertGlyph() {
+  return makeSvg(
+    `<path d="M9.25 3h1.5v6.25H17v1.5h-6.25V17h-1.5v-6.25H3v-1.5h6.25V3Z" fill="currentColor"/>`,
+  );
+}
+
+function makeInfoGlyph() {
+  return makeSvg(
+    `<path d="M10 2.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15Zm0 1.6a5.9 5.9 0 1 1 0 11.8 5.9 5.9 0 0 1 0-11.8ZM9.2 8.5h1.6v5H9.2v-5Zm0-2.6h1.6v1.6H9.2V5.9Z" fill="currentColor"/>`,
   );
 }
 
@@ -1059,13 +1382,8 @@ export const CustomContainer = React.forwardRef(({ instance: loaded }, ref) => {
   }
 
   function startContentEditor() {
-    if (!viewerInstance || !PSPDFKit) return;
-    // Use the new namespaced API where available. Falls back to the view-state
-    // mutation path otherwise.
-    if (viewerInstance.contentEditor?.enter) {
-      viewerInstance.contentEditor.enter();
-      return;
-    }
+    // Content editing is entered through the interaction mode; the
+    // `contentEditor` namespace intentionally has no enter/exit methods.
     startInteractionMode(PSPDFKit.InteractionMode.CONTENT_EDITOR);
   }
 
